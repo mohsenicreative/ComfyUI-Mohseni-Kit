@@ -9,12 +9,17 @@ from .scheduler import (
     SCHED_CLASS_MAPPINGS,
     SCHED_DISPLAY_NAME_MAPPINGS,
 )
+from .ksampler_presets import register_ksampler_presets
 
 if V3_AVAILABLE:
     from typing_extensions import override
     from comfy_api.latest import ComfyExtension, io
 
     class MohseniKitExtension(ComfyExtension):
+        @override
+        async def on_load(self):
+            register_ksampler_presets()
+
         @override
         async def get_node_list(self) -> list[type[io.ComfyNode]]:
             return [FloatPreviewNode, SchedulerNode]
@@ -24,6 +29,8 @@ if V3_AVAILABLE:
 
     __all__ = ["comfy_entrypoint"]
 else:
+    register_ksampler_presets()
+
     NODE_CLASS_MAPPINGS = {}
     NODE_DISPLAY_NAME_MAPPINGS = {}
 
