@@ -868,8 +868,7 @@ def fingerprint_float_preview(image, always_show_preview=False):
 
 # --- Custom Node Definition ---
 try:
-    from typing_extensions import override
-    from comfy_api.latest import ComfyExtension, io  # type: ignore
+    from comfy_api.latest import io  # type: ignore
 
     V3_AVAILABLE = True
 except ImportError:
@@ -903,14 +902,6 @@ if V3_AVAILABLE:
         def execute(cls, Image: torch.Tensor, Always_Show_Preview: bool = False):
             render_float_preview(Image, Always_Show_Preview)
             return io.NodeOutput()
-
-    class MohseniKitExtension(ComfyExtension):
-        @override
-        async def get_node_list(self) -> list[type[io.ComfyNode]]:
-            return [FloatPreviewNode]
-
-    async def comfy_entrypoint() -> MohseniKitExtension:
-        return MohseniKitExtension()
 
 else:
 

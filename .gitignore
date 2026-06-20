@@ -169,3 +169,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Runtime-generated node settings
+float_preview_settings.json
