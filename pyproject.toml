@@ -6,10 +6,10 @@ license = {file = "LICENSE"}
 dependencies = ["PyQt6", "ftfy"]
 
 [project.urls]
-Repository = "https://github.com/mohseni-mr/ComfyUI-Mohseni-Kit"
+Repository = "https://github.com/mohsenicreative/ComfyUI-Mohseni-Kit"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
 PublisherId = "mohseni-mr"
 DisplayName = "ComfyUI-Mohseni-Kit"
-Icon = "https://raw.githubusercontent.com/mohseni-mr/ComfyUI-Mohseni-Kit/main/assets/mohseni_logo.svg"
+Icon = "https://raw.githubusercontent.com/mohsenicreative/ComfyUI-Mohseni-Kit/main/assets/mohseni_logo.svg"
