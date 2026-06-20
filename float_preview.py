@@ -797,100 +797,150 @@ def cleanup_json_file():
             log_message(f"Failed to delete {JSON_FILE_PATH}: {e}", "warning")
 
 
-# --- Custom Node Definition ---
-class FloatPreviewNode:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "Image": ("IMAGE",),
-            },
-            "optional": {
-                "Always_Show_Preview": (
-                    "BOOLEAN",
-                    {"default": False},
-                ),
-            },
-        }
+# --- Preview Logic ---
+def render_float_preview(image, always_show_preview=False):
+    if image is None:
+        log_message("Received None as input image. Skipping execution.", "warning")
+        return
 
-    RETURN_TYPES = ()
-    FUNCTION = "execute"
-    OUTPUT_NODE = True
-    CATEGORY = "⚡ Mohseni Kit/Image"
+    try:
+        if safe_is_dir(FLOAT_PREVIEW_TEMP_DIR):
+            for filename in safe_list_dir(FLOAT_PREVIEW_TEMP_DIR):
+                if filename.startswith("temp_float_preview_"):
+                    file_path = safe_path(FLOAT_PREVIEW_TEMP_DIR, filename)
+                    safe_remove(file_path)
+    except Exception as e:
+        log_message(f"Cleanup failed: {e}", "error")
 
-    def execute(self, Image: torch.Tensor, Always_Show_Preview: bool):
-        """Processes the input image tensor and displays it in a floating window."""
-        if Image is None:
-            log_message("Received None as input image. Skipping execution.", "warning")
-            return ()
+    if image.ndim == 4:
+        batch_size = image.shape[0]
+        images = [image[i] for i in range(batch_size)]
+    else:
+        images = [image]
 
-        try:
-            if safe_is_dir(FLOAT_PREVIEW_TEMP_DIR):
-                for filename in safe_list_dir(FLOAT_PREVIEW_TEMP_DIR):
-                    if filename.startswith("temp_float_preview_"):
-                        file_path = safe_path(FLOAT_PREVIEW_TEMP_DIR, filename)
-                        safe_remove(file_path)
-        except Exception as e:
-            log_message(f"Cleanup failed: {e}", "error")
+    temp_paths = []
+    num_images = len(images)
+    max_digits = max(len(str(num_images)), 2)
 
-        # Check if input is batched (B, H, W, C)
-        if Image.ndim == 4:
-            batch_size = Image.shape[0]
-            images = [Image[i] for i in range(batch_size)]
-        else:
-            images = [Image]
-
-        # Convert all images to PIL format and save them
-        temp_paths = []
-        num_images = len(images)
-        max_digits = max(len(str(num_images)), 2)
-
-        transform = T.ToPILImage()
-        for i, img in enumerate(images):
-            if img.ndim != 3 or img.shape[2] != 3:
-                raise ValueError(
-                    f"Invalid input shape {img.shape}. Expected (H, W, 3) image tensor."
-                )
-
-            img = img.permute(2, 0, 1).clamp(0, 1)
-            pil_img = transform(img)
-
-            formatted_index = str(i + 1).zfill(max_digits)
-
-            temp_path = safe_path(
-                FLOAT_PREVIEW_TEMP_DIR,
-                f"temp_float_preview_{formatted_index}_{generate_random_string(6)}.png",
+    transform = T.ToPILImage()
+    for i, img in enumerate(images):
+        if img.ndim != 3 or img.shape[2] != 3:
+            raise ValueError(
+                f"Invalid input shape {img.shape}. Expected (H, W, 3) image tensor."
             )
 
-            pil_img.save(temp_path, format="PNG", optimize=False, compress_level=1)
-            temp_paths.append(temp_path)
+        img = img.permute(2, 0, 1).clamp(0, 1)
+        pil_img = transform(img)
 
-        # Pass all image paths to the Float Window
-        open_float_window(temp_paths)
-        return ()
+        formatted_index = str(i + 1).zfill(max_digits)
 
-    @classmethod
-    def IS_CHANGED(cls, Image, Always_Show_Preview=False):
-        """Check if the node should re-execute."""
-        if Always_Show_Preview or Image is None:
-            return generate_random_string(12)
+        temp_path = safe_path(
+            FLOAT_PREVIEW_TEMP_DIR,
+            f"temp_float_preview_{formatted_index}_{generate_random_string(6)}.png",
+        )
 
-        try:
-            if Image.ndim == 4:  # (B, H, W, C)
-                Image = Image[0]
+        pil_img.save(temp_path, format="PNG", optimize=False, compress_level=1)
+        temp_paths.append(temp_path)
 
-            max_size = min(768, max(Image.shape[0], Image.shape[1]) // 4)
-            min_size = 128
+    open_float_window(temp_paths)
 
-            if max(Image.shape[0], Image.shape[1]) > max_size:
-                scale_transform = T.Resize(max_size, antialias=True)
-                Image = scale_transform(Image.permute(2, 0, 1)).permute(1, 2, 0)
 
-            return generate_image_hash(Image)
-        except Exception:
-            pass
-
+def fingerprint_float_preview(image, always_show_preview=False):
+    if always_show_preview or image is None:
         return generate_random_string(12)
+
+    try:
+        if image.ndim == 4:
+            image = image[0]
+
+        max_size = min(768, max(image.shape[0], image.shape[1]) // 4)
+
+        if max(image.shape[0], image.shape[1]) > max_size:
+            scale_transform = T.Resize(max_size, antialias=True)
+            image = scale_transform(image.permute(2, 0, 1)).permute(1, 2, 0)
+
+        return generate_image_hash(image)
+    except Exception:
+        pass
+
+    return generate_random_string(12)
+
+
+# --- Custom Node Definition ---
+try:
+    from typing_extensions import override
+    from comfy_api.latest import ComfyExtension, io  # type: ignore
+
+    V3_AVAILABLE = True
+except ImportError:
+    V3_AVAILABLE = False
+
+
+if V3_AVAILABLE:
+
+    class FloatPreviewNode(io.ComfyNode):
+        @classmethod
+        def define_schema(cls):
+            return io.Schema(
+                node_id="FloatPreview",
+                display_name="🖼️ Float Preview",
+                category="⚡ Mohseni Kit/Image",
+                is_output_node=True,
+                inputs=[
+                    io.Image.Input("Image"),
+                    io.Boolean.Input(
+                        "Always_Show_Preview", default=False, optional=True
+                    ),
+                ],
+                outputs=[],
+            )
+
+        @classmethod
+        def fingerprint_inputs(cls, Image, Always_Show_Preview=False):
+            return fingerprint_float_preview(Image, Always_Show_Preview)
+
+        @classmethod
+        def execute(cls, Image: torch.Tensor, Always_Show_Preview: bool = False):
+            render_float_preview(Image, Always_Show_Preview)
+            return io.NodeOutput()
+
+    class MohseniKitExtension(ComfyExtension):
+        @override
+        async def get_node_list(self) -> list[type[io.ComfyNode]]:
+            return [FloatPreviewNode]
+
+    async def comfy_entrypoint() -> MohseniKitExtension:
+        return MohseniKitExtension()
+
+else:
+
+    class FloatPreviewNode:
+        @classmethod
+        def INPUT_TYPES(cls):
+            return {
+                "required": {
+                    "Image": ("IMAGE",),
+                },
+                "optional": {
+                    "Always_Show_Preview": (
+                        "BOOLEAN",
+                        {"default": False},
+                    ),
+                },
+            }
+
+        RETURN_TYPES = ()
+        FUNCTION = "execute"
+        OUTPUT_NODE = True
+        CATEGORY = "⚡ Mohseni Kit/Image"
+
+        def execute(self, Image: torch.Tensor, Always_Show_Preview: bool = False):
+            render_float_preview(Image, Always_Show_Preview)
+            return ()
+
+        @classmethod
+        def IS_CHANGED(cls, Image, Always_Show_Preview=False):
+            return fingerprint_float_preview(Image, Always_Show_Preview)
 
 
 if __name__ == "__main__":
@@ -900,8 +950,12 @@ if __name__ == "__main__":
         log_message("Running Float Preview normally.", "success")
 
 # --- Register Custom Node ---
-FP_CLASS_MAPPINGS = {"FloatPreview": FloatPreviewNode}
-FP_DISPLAY_NAME_MAPPINGS = {"FloatPreview": "🖼️ Float Preview"}
+if V3_AVAILABLE:
+    FP_CLASS_MAPPINGS = {}
+    FP_DISPLAY_NAME_MAPPINGS = {}
+else:
+    FP_CLASS_MAPPINGS = {"FloatPreview": FloatPreviewNode}
+    FP_DISPLAY_NAME_MAPPINGS = {"FloatPreview": "🖼️ Float Preview"}
 
 # --- Cleanup ---
 atexit.register(cleanup_json_file)
