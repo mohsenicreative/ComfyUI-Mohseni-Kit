@@ -1,106 +1,128 @@
 # ⚡ ComfyUI Mohseni Kit
 
-**ComfyUI Mohseni Kit** is a collection of useful custom nodes for **ComfyUI**, designed to improve visualization, workflow efficiency, and user experience.
+A collection of professional custom nodes for **ComfyUI**, focused on precise sampling control and a smoother preview workflow.
 
-## 🌟 Features
+## Nodes
 
-✅ **Float Preview Node** – A live floating image preview for ComfyUI
-✅ **More nodes coming soon** – The kit will be expanded with additional functionality
-✅ **Lightweight & Efficient** – Optimized for performance and fast updates
+| Node | Category | Purpose |
+|---|---|---|
+| 📈 Mohseni Scheduler | `⚡ Mohseni Kit / Sampling` | Karras polynomial sigma scheduler tuned for two-stage sampling |
+| 🖼️ Float Preview | `⚡ Mohseni Kit / Image` | Floating, always-on-top image preview window |
 
 ---
 
-## 🖼️ Float Preview Node
+## 📈 Mohseni Scheduler
 
-### **🔹 What is Float Preview?**
+A custom **sigma scheduler** that outputs a `SIGMAS` curve using **Karras polynomial spacing** with a tunable shape. It is built for **two-stage sampling** — a composition/color pass followed by a detailing pass — letting the same formula bias steps toward either end of the noise range.
 
-The **Float Preview Node** allows you to preview generated images in a **floating, resizable, and always-on-top window** while using ComfyUI.
-Unlike the built-in preview, this window persists **outside of the ComfyUI interface**, making it **perfect for multi-monitor workflows**.
+> **Output:** `SIGMAS` — connect it to `SamplerCustom` / `SamplerCustomAdvanced` (with a `KSamplerSelect`), not the standard `KSampler`.
 
-### **🔹 Features**
+### Parameters
 
-- 🔍 **Live Image Preview** – View images in real-time while working in ComfyUI.
-- 🖥️ **Floating Window** – Can be moved, resized, and stays always on top.
-- 🏆 **Batch Image Support** – Scroll through multiple images when batch processing.
-- 💾 **Save & Copy** – Easily save or copy previewed images.
-- 🎨 **Nice Modern UI - PyQt6** – Supports dark/light themes and custom scaling based on system settings.
-- 📌 **Always On Top** – Keep the window visible while switching between apps.
-- 🖱️ **Window Dragging** - Move the window to anywhere just bu dragging.
-- ⚙️ **Persistant Settings** - Your settings like window `size`, `position` and `Always on Top` will be save and load across workflows (inside this node directory itself).
-- ⌨️ **Keyboard Shortcuts** – Navigate images & toggle settings quickly.
-- ☰ **Right Click Menu** - Same as keyboard shortcuts but in a right click menu
+| Parameter | Description | Typical |
+|---|---|---|
+| `scheduler` | Spacing formula. Currently `karras_polynomial` (extensible). | — |
+| `steps` | Sampling steps for this stage. | 15–30 |
+| `denoise` | `1.0` starts from pure noise; lower values start partway down the curve. | detail: 0.35–0.5 |
+| `rho` | Curve shape. **< 1 = composition** (steps held high), `1` = linear, **> 1 = detail** (steps packed low). | compose 0.4–0.8 / detail 7–15 |
+| `shift` | Adds high-noise step density on top of `rho` (resolution-aware). `1.0` = off. | compose 2–4 / detail 1.0 |
+| `sigma_max` | Top of the noise range. `0` = auto from model. | 0 |
+| `sigma_min` | Bottom of the noise range. `0` = auto from model. | 0 |
+
+### Why polynomial spacing
+
+Composition and color form at **high noise**; fine detail forms at **low noise**. `rho` decides where the steps are spent:
+
+- **Composition** — `rho` below `1` (e.g. `0.6`) holds steps in the high-noise band; add `shift` `2–4` for more resolution there.
+- **Detail** — `rho` of `7–15` concentrates steps in the low-noise band, which adds detail far more cleanly than exponential spacing.
+
+### Two-stage detailing recipe
+
+| | Pass 1 — composition | Pass 2 — detail |
+|---|---|---|
+| `steps` | 24 | 18 |
+| `denoise` | 1.0 | 0.45 |
+| `rho` | 0.6 | 10.0 |
+| `shift` | 3.0 | 1.0 |
+| `sigma_max` / `sigma_min` | 0 / 0 | 0 / 0 |
+
+Per pass, wire `Mohseni Scheduler → SamplerCustom (sigmas)` and `KSamplerSelect → SamplerCustom (sampler)`. Pass 1 runs on an empty latent (`add_noise` on); feed its `LATENT` into Pass 2 (`add_noise` on), then `VAE Decode`.
+
+> **Tip:** for a detail pass without splitting, use `denoise 1.0` with `sigma_max ≈ 2.5` and `sigma_min 0` to keep the whole schedule in the low-noise band.
+
+### KSampler dropdown presets
+
+Two fixed presets are added to the standard `KSampler` scheduler dropdown automatically:
+
+- `mohseni_compose` — composition-weighted (`rho 0.5`, `shift 3`)
+- `mohseni_detail` — detail-weighted (`rho 7`)
+
+They are fixed-value (no live controls) — use the node to tune, the presets for speed. On an incompatible ComfyUI build they are skipped without affecting the rest of the kit.
+
+---
+
+## 🖼️ Float Preview
+
+A floating, resizable, always-on-top image preview window that lives **outside** the ComfyUI interface — ideal for multi-monitor setups.
+
+### Features
+
+- Live preview that updates as the workflow runs
+- Batch support — scroll through multiple images
+- Save to disk or copy to clipboard
+- Always-on-top toggle and free window dragging
+- Persistent window size, position, and state across sessions
+- Keyboard shortcuts and a right-click menu
+
+### Controls
+
+| Action | Description |
+|---|---|
+| ← / ↑ | Previous image |
+| → / ↓ | Next image |
+| Ctrl + T | Toggle always on top |
+| Ctrl + C | Copy current image to clipboard |
+| Ctrl + S | Save current image (PNG / JPEG) |
+| Esc | Close the window |
+| Right click | Open the context menu |
+
+Connect any `IMAGE` output to the node and run the workflow; the window appears and tracks new outputs.
 
 ---
 
 ## 📥 Installation
 
-- ### Manual Installation
+### ComfyUI Manager
 
-  - ***(Method 1)***
+Search for **ComfyUI Mohseni Kit** in ComfyUI Manager, click **Install**, then restart ComfyUI.
 
-1. Goto ComfyUI/custom_nodes directory in terminal(cmd)
+### Manual
 
-2. ```bash
-    git clone https://github.com/mohseni-mr/ComfyUI-Mohseni-Kit
-3. Restart ComfyUI
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/mohsenicreative/ComfyUI-Mohseni-Kit
+```
 
-- ### Using ComfyUI Manager (Soon - to be confirmed)
+Restart ComfyUI. Dependencies are installed automatically; if needed, install them manually:
 
-  - ***(Method 2)***
-
-1. Open ComfyUI.
-2. Go to **ComfyUI Manager**.
-3. Search for **ComfyUI Mohseni Kit** and click **Install**.
-4. Restart ComfyUI.
-
----
-
-🛠️ How to Use
-Find the node in ComfyUI under:
-> `⚡ Mohseni Kit \ Preview`
-
-Connect an IMAGE output to the Float Preview Node.
-Run the workflow.
-The floating window will appear, showing the generated images.
-Use arrow keys (← →) or to navigate batch images.
-Right-click for additional options (Save, Copy, Always On Top).
-
----
-
-## 📌 Settings & Controls
-
-| Action             | Description                      |
-|--------------------|----------------------------------|
-| Up or Left         | Navigate to Previous Image       |
-| Down or Right      | Navigate to Next Image           |
-| CTRL + T           | Toggle Always on Top             |
-| CTRL + C           | Copy Current Image to Clipboard  |
-| CTRL + S           | Save Current Image (PNG or JPEG) |
-| Esc                | Close the Window                 |
-| Moouse Right Click | Open the Context Menu            |
-
----
-
-## 📌 Dependencies
-
-- PyQt6 (pip install PyQt6)
-- ftfy (pip install ftfy)
+```bash
+pip install PyQt6 ftfy psutil
+```
 
 ---
 
 ## 📜 License
 
-This project is licensed under the **Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)**.
+Licensed under **Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**.
 
-- You **must credit** the original author: **Mohammadreza Mohseni**.
-- If you modify this project, **you must share it under the same license**.
-- Commercial use is **allowed**, but credit is required.
+- Credit the original author: **Mohammadreza Mohseni**.
+- Modifications must be shared under the same license.
+- Commercial use is allowed with attribution.
 
-🔗 **Read the full license here:** [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+Full text: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
 ---
 
-## 📬 Contact & Support
+## 📬 Contact
 
-For questions or feedback, contact:
-> [Mohammadreza Mohseni](https://bio.mohseni.info)
+[Mohammadreza Mohseni](https://bio.mohseni.info)
